@@ -36,8 +36,10 @@ class CycleGANModel(BaseModel):
         Identity loss (optional): lambda_identity * (||G_A(B) - B|| * lambda_B + ||G_B(A) - A|| * lambda_A) (Sec 5.2 "Photo generation from paintings" in the paper)
         Dropout is not used in the original CycleGAN paper.
         """
+        # My Change: Option for cyclic loss only
         parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
         if is_train:
+            parser.add_argument('--no_adversarial', type=bool, default=False, help='sets the adversarial loss to zero so the model is trained on cyclic loss alone')
             parser.add_argument('--lambda_A', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
             parser.add_argument('--lambda_B', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
@@ -87,6 +89,13 @@ class CycleGANModel(BaseModel):
             self.fake_A_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             self.fake_B_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             # define loss functions
+            if opt.no_adversarial:
+                print("no_adv:\t")
+                self.adv_switch = 0.0
+            else:
+                print("adv:\t")
+                self.adv_switch = 1.0
+
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
@@ -136,17 +145,17 @@ class CycleGANModel(BaseModel):
         # Combined loss and calculate gradients
         loss_D = (loss_D_real + loss_D_fake) * 0.5
         loss_D.backward()
-        return loss_D
+        return loss_D * self.adv_switch
 
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
         fake_B = self.fake_B_pool.query(self.fake_B)
-        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B)
+        self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B) * self.adv_switch
 
     def backward_D_B(self):
         """Calculate GAN loss for discriminator D_B"""
         fake_A = self.fake_A_pool.query(self.fake_A)
-        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A)
+        self.loss_D_B = self.backward_D_basic(self.netD_B, self.real_A, fake_A) * self.adv_switch
 
     def backward_G(self):
         """Calculate the loss for generators G_A and G_B"""
@@ -166,9 +175,9 @@ class CycleGANModel(BaseModel):
             self.loss_idt_B = 0
 
         # GAN loss D_A(G_A(A))
-        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
+        self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True) * self.adv_switch
         # GAN loss D_B(G_B(B))
-        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+        self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True) * self.adv_switch
         # Forward cycle loss || G_B(G_A(A)) - A||
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
         # Backward cycle loss || G_A(G_B(B)) - B||
