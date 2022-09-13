@@ -1,5 +1,9 @@
 #ME
 main.py
+log.txt
+wandb/
+scripts/TEE/
+misc/
 
 .DS_Store
 debug*
