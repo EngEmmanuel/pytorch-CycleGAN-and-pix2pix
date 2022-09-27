@@ -1,10 +1,9 @@
-from importlib.metadata import requires
 import os
-from data.base_dataset import BaseDataset, get_transform
+from data.base_dataset import BaseDataset
+from data.transformations import *
 from data.image_folder import make_dataset
 from PIL import Image
 import random
-
 
 class TEEUnalignedDataset(BaseDataset):
     """
@@ -34,8 +33,8 @@ class TEEUnalignedDataset(BaseDataset):
         btoA = self.opt.direction == 'BtoA'
         input_nc = self.opt.output_nc if btoA else self.opt.input_nc       # get the number of channels of input image
         output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
-        self.transform_A = get_transform(self.opt, grayscale=(input_nc == 1))
-        self.transform_B = get_transform(self.opt, grayscale=(output_nc == 1))
+        self.transform_A = get_transform(self.opt, grayscale=(input_nc == 1) , domain="A")
+        self.transform_B = get_transform(self.opt, grayscale=(output_nc == 1), domain="B")
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -73,13 +72,48 @@ class TEEUnalignedDataset(BaseDataset):
 
     def modify_commandline_options(parser, is_train):
         if is_train:
-            parser.add_argument("--addNoiseA", type=float, default= "0_1", help="Add gaussian noise of parameters mean_std to all images in A")
-            parser.add_argument("--addNoiseB", type=float, default= "0_1", help="Add gaussian noise of parameters mean_std to all images in B")
+            parser.add_argument("--addNoiseA", type=float, help="Add gaussian noise of parameters mean_std to all images in A")
+            parser.add_argument("--addNoiseB", type=float, help="Add gaussian noise of parameters mean_std to all images in B")
 
 
-        
-        parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
-        parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
-        parser.add_argument('--use_wandb', action='store_true', help='use wandb')
-        parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-        parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
+def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, domain = None):
+    transform_list = []
+    if grayscale:
+        transform_list.append(transforms.Grayscale(1))
+    if 'resize' in opt.preprocess:
+        osize = [opt.load_size, opt.load_size]
+        transform_list.append(transforms.Resize(osize, method))
+    elif 'scale_width' in opt.preprocess:
+        transform_list.append(transforms.Lambda(lambda img: __scale_width(img, opt.load_size, opt.crop_size, method)))
+
+    if 'crop' in opt.preprocess:
+        if params is None:
+            transform_list.append(transforms.RandomCrop(opt.crop_size))
+        else:
+            transform_list.append(transforms.Lambda(lambda img: __crop(img, params['crop_pos'], opt.crop_size)))
+
+    if opt.preprocess == 'none':
+        transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base=4, method=method)))
+
+    if not opt.no_flip:
+        if params is None:
+            transform_list.append(transforms.RandomHorizontalFlip())
+        elif params['flip']:
+            transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
+
+    if convert:
+        transform_list += [transforms.ToTensor()]
+        if grayscale:
+            transform_list += [transforms.Normalize((0.5,), (0.5,))]
+        else:
+            transform_list += [transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+
+    if domain is not None: # domain specific transformation
+        assert (domain in ["A", "B"]) 
+
+        if eval(f"opt.addNoise{domain}") is not None:
+            params = eval(f"opt.addNoise{domain}").split("_")
+            mean, std = params[0], params[1]
+            transform_list += [AddGaussianNoise(mean, std)]
+
+    return transforms.Compose(transform_list)
