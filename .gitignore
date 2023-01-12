@@ -4,6 +4,7 @@ log.txt
 wandb/
 scripts/TEE/
 misc/
+cluster/
 
 .DS_Store
 debug*
