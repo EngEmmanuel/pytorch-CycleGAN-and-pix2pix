@@ -1,11 +1,11 @@
 import os
+from .transformations import *
 from data.base_dataset import BaseDataset
-from data.transformations import *
 from data.image_folder import make_dataset
 from PIL import Image
 import random
 
-class TEEUnalignedDataset(BaseDataset):
+class TEEDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
 
@@ -70,12 +70,13 @@ class TEEUnalignedDataset(BaseDataset):
         """
         return max(self.A_size, self.B_size)
 
+    @staticmethod
     def modify_commandline_options(parser, is_train):
         if is_train:
-            parser.add_argument("--addNoiseA", type=float, help="Add gaussian noise of parameters mean_std to all images in A")
-            parser.add_argument("--addNoiseB", type=float, help="Add gaussian noise of parameters mean_std to all images in B")
-
-
+            parser.add_argument("--addNoiseA", type=str, help="Add gaussian noise of parameters mean_std to all images in A")
+            parser.add_argument("--addNoiseB", type=str, help="Add gaussian noise of parameters mean_std to all images in B")
+        return parser
+        
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True, domain = None):
     transform_list = []
     if grayscale:
@@ -112,8 +113,9 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
         assert (domain in ["A", "B"]) 
 
         if eval(f"opt.addNoise{domain}") is not None:
-            params = eval(f"opt.addNoise{domain}").split("_")
-            mean, std = params[0], params[1]
+            params = eval(f"opt.addNoise{domain}").split(",")
+            mean, std = float(params[0]), float(params[1])
+            print("mean", mean,"std",std, sep='\t')
             transform_list += [AddGaussianNoise(mean, std)]
-
+        print(transform_list)
     return transforms.Compose(transform_list)
