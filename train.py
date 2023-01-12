@@ -24,6 +24,9 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
 
+#edit#
+from datetime import timedelta
+
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
@@ -35,6 +38,9 @@ if __name__ == '__main__':
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
 
+    #edit#
+    whole_run_time = time.time()
+    #
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
@@ -73,5 +79,8 @@ if __name__ == '__main__':
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
-
-        print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
+        # edit #
+        elapsed = timedelta(seconds=(time.time() - whole_run_time))
+        print('End of epoch %d / %d \t Time Taken: %d sec \t Total Time Taken: %s\t Avg Epoch Time: %s'\
+                 % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time, str(elapsed), \
+                     str(timedelta(seconds=(elapsed.seconds)/epoch))))
