@@ -8,7 +8,7 @@ misc/
 
 # Cluster specific
 *cluster*
-run_outputs/
+run_outputs/*
 
 .DS_Store
 debug*
